@@ -1,179 +1,47 @@
 require 'json'
-
-# ## Sinatra::RestAPI [module]
-# A plugin for providing rest API to models. Great for Backbone.js.
-#
-# To use this, simply `register` it to your Sinatra Application.  You can then
-# use `rest_create` and `rest_resource` to create your routes.
-#
-#     require 'sinatra/restapi'
-#
-#     class App < Sinatra::Base
-#       register Sinatra::RestAPI
-#     end
-#
-# ### RestAPI example
-# Here's a simple example of how to use Backbone models with RestAPI.
-# Also see the [example application][ex] included in the gem.
-#
-# [ex]: https://github.com/rstacruz/sinatra-backbone/tree/master/examples/restapi
-#
-# #### Model setup
-# Let's say you have a `Book` model in your application. Let's use [Sequel][sq]
-# for this example, but feel free to use any other ORM that is
-# ActiveModel-compatible.
-#
-# You will need to define `to_hash` in your model.
-#
-#     db = Sequel.connect(...)
-#
-#     db.create_table :books do
-#       primary_key :id
-#       String :title
-#       String :author
-#     end
-#
-#     class Book < Sequel::Model
-#       # ...
-#       def to_hash
-#         { :title => title, :author => author, :id => id }
-#       end
-#     end
-#
-# [sq]: http://sequel.rubyforge.org
-#
-# #### Sinatra
-# To provide some routes for Backbone models, use `rest_resource` and
-# `rest_create`:
-#
-#     require 'sinatra/restapi'
-#
-#     class App < Sinatra::Base
-#       register Sinatra::RestAPI
-#
-#       rest_create '/book' do
-#         Book.new
-#       end
-#
-#       rest_resource '/book/:id' do |id|
-#         Book.find(:id => id)
-#       end
-#     end
-#
-# #### JavaScript
-# In your JavaScript files, let's make a corresponding model.
-#
-#     Book = Backbone.Model.extend({
-#       urlRoot: '/book'
-#     });
-#
-# Now you may create a new book through your JavaScript:
-#
-#     book = new Book;
-#     book.set({ title: "Darkly Dreaming Dexter", author: "Jeff Lindsay" });
-#     book.save();
-#
-#     // In Ruby, equivalent to:
-#     // book = Book.new
-#     // book.title  = "Darkly Dreaming Dexter"
-#     // book.author = "Jeff Lindsay"
-#     // book.save
-#
-# Or you may retrieve new items. Note that in this example, since we defined
-# `urlRoot()` but not `url()`, the model URL with default to `/[urlRoot]/[id]`.
-#
-#     book = new Book({ id: 1 });
-#     book.fetch();
-#
-#     // In Ruby, equivalent to:
-#     // Book.find(:id => 1)
-#
-# Deletes will work just like how you would expect it:
-#
-#     book.destroy();
-#
 module Sinatra::RestAPI
   def self.registered(app)
     app.helpers Helpers
   end
 
-  # ### rest_create(path, &block) [method]
-  # Creates a *create* route on the given `path`.
-  #
-  # This creates a `POST` route in */documents* that accepts JSON data.
-  # This route will return the created object as JSON.
-  #
-  # When getting a request, it does the following:
-  # 
-  #  * A new object is created by *yielding* the block you give. (Let's
-  #    call it `object`.)
-  #
-  #  * For each of the attributes, it uses the `attrib_name=` method in
-  #    your record. For instance, for an attrib like `title`, it wil lbe
-  #    calling `object.title = "hello"`.
-  #
-  #  * if `object.valid?` returns false, it returns an error 400.
-  #
-  #  * `object.save` will then be called.
-  #
-  #  * `object`'s contents will then be returned to the client as JSON.
-  #
-  # See the example.
-  #
-  #     class App < Sinatra::Base
-  #       rest_create "/documents" do
-  #         Document.new
-  #       end
-  #     end
-  #
-  def rest_create(path, options={}, &blk)
-    # Create
+  def rest_create(path, model, &blk)
+
+    #delete
+    delete path + '/:id' do
+      @service_type = model.find(params[:id])
+      @service_type.destroy
+    end
+
+    #post
     post path do
-      @object = yield
-      rest_params.each { |k, v| @object.send :"#{k}=", v }
+      params.merge! Yajl::Parser.parse(request.body.read.to_s)
+      object = model.create(params);
+      object.to_json
+    end
 
-      return 400, @object.errors.to_json  unless @object.valid?
+    #index
+    get path do
+      limit       = params['limit'].to_i || 10
+      skip        = params['skip'].to_i  || 0
+      short_title = params['short_title']
+      if short_title
+        total =  model.where(title: /#{short_title}/i).count
+        items =  model.where(title: /#{short_title}/i).limit(limit).skip(skip)
+      else
+        total =  model.all.count
+        items =  model.all.limit(limit).skip(skip)
+      end
 
-      @object.save
-      rest_respond @object.to_hash
+      res  = {
+        skip:  skip,
+        total: total,
+        limit: limit,
+        items: items
+      }
+      json res
     end
   end
 
-  # ### rest_resource(path, &block) [method]
-  # Creates a *get*, *edit* and *delete* route on the given `path`.
-  #
-  # The block given will be yielded to do a record lookup. If the block returns
-  # `nil`, RestAPI will return a *404*.
-  #
-  # In the example, it creates routes for `/document/:id` to accept HTTP *GET*
-  # (for object retrieval), *PUT* (for editing), and *DELETE* (for destroying).
-  #
-  # Your model needs to implement the following methods:
-  #
-  #    * `save` (called on edit)
-  #    * `destroy` (called on delete)
-  #    * `<attrib_name_here>=` (called for each of the attributes on edit)
-  #
-  # If you only want to create routes for only one or two of the actions, you
-  # may individually use:
-  #
-  #    * `rest_get`
-  #    * `rest_edit`
-  #    * `rest_delete`
-  #
-  # All the methods above take the same arguments as `rest_resource`.
-  #
-  #     class App < Sinatra::Base
-  #       rest_resource "/document/:id" do |id|
-  #         Document.find(:id => id)
-  #       end
-  #     end
-  #
-  def rest_resource(path, options={}, &blk)
-    rest_get    path, options, &blk
-    rest_edit   path, options, &blk
-    rest_delete path, options, &blk
-  end
 
   # ### rest_get(path, &block) [method]
   # This is the same as `rest_resource`, but only handles *GET* requests.

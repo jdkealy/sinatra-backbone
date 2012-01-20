@@ -21,12 +21,20 @@ module Sinatra::RestAPI
 
     #index
     get path do
+      search_params = ""
+      params.each do |k, v|
+        if k != 'limit' and k != 'skip'
+          $stderr.puts k
+          search_params << "#{k}: /#{v}/i"
+        end
+      end
+      $stderr.puts search_params
       limit       = params['limit'].to_i || 10
       skip        = params['skip'].to_i  || 0
-      short_title = params['short_title']
+      short_title = params['title']
       if short_title
-        total =  model.where(title: /#{short_title}/i).count
-        items =  model.where(title: /#{short_title}/i).limit(limit).skip(skip)
+        total =  model.where(title: /#{title}/i).count
+        items =  model.where(title: /#{title}/i).limit(limit).skip(skip)
       else
         total =  model.all.count
         items =  model.all.limit(limit).skip(skip)

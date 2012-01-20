@@ -22,23 +22,19 @@ module Sinatra::RestAPI
     #index
     get path do
       search_params = ""
+      query = {}
       params.each do |k, v|
-        if k != 'limit' and k != 'skip'
-          $stderr.puts k
-          search_params << "#{k}: /#{v}/i"
+        if k != 'limit' and k != 'skip' and v.length > 0
+          query[k.to_s] = /#{v}/i
         end
       end
-      $stderr.puts search_params
+      $stderr.puts query
       limit       = params['limit'].to_i || 10
       skip        = params['skip'].to_i  || 0
       short_title = params['title']
-      if short_title
-        total =  model.where(title: /#{title}/i).count
-        items =  model.where(title: /#{title}/i).limit(limit).skip(skip)
-      else
-        total =  model.all.count
-        items =  model.all.limit(limit).skip(skip)
-      end
+
+      total =  model.where(query).all.count
+      items =  model.where(query).all.limit(limit).skip(skip)
 
       res  = {
         skip:  skip,

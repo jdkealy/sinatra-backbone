@@ -15,12 +15,14 @@ module Sinatra::RestAPI
     #post
     post path do
       params.merge! Yajl::Parser.parse(request.body.read.to_s)
+      $stderr.puts params
       object = model.create(params);
       object.to_json
     end
 
     #index
     get path do
+      $stderr.puts params
       search_params = ""
       query = {}
       params.each do |k, v|

@@ -20,6 +20,19 @@ module Sinatra::RestAPI
       object.to_json
     end
 
+
+
+
+    put path + '/:id' do
+      params.merge! Yajl::Parser.parse(request.body.read.to_s)
+      item = model.find(params['id'])
+      if item.update_attributes(params)
+        json item
+      else
+        throw :halt, [404,'Cannot update']
+      end
+    end
+
     #index
     get path do
       $stderr.puts params

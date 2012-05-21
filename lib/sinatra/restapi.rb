@@ -15,7 +15,6 @@ module Sinatra::RestAPI
     #post
     post path do
       params.merge! Yajl::Parser.parse(request.body.read.to_s)
-      $stderr.puts params
       object = model.create(params);
       object.to_json
     end
@@ -35,7 +34,6 @@ module Sinatra::RestAPI
 
     #index
     get path do
-      $stderr.puts params
       search_params = ""
       query = {}
       params.each do |k, v|
@@ -43,7 +41,6 @@ module Sinatra::RestAPI
           query[k.to_s] = /#{v}/i
         end
       end
-      $stderr.puts query
       limit       = params['limit'].to_i || 10
       skip        = params['skip'].to_i  || 0
       short_title = params['title']
@@ -57,14 +54,13 @@ module Sinatra::RestAPI
         limit: limit,
         items: items
       }
-      json res
+      res.to_json
     end
   end
 
 
   # ### rest_get(path, &block) [method]
   # This is the same as `rest_resource`, but only handles *GET* requests.
-  #
   def rest_get(path, options={}, &blk)
     get path do |*args|
       @object = yield(*args) or pass
